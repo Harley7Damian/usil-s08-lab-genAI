@@ -2,12 +2,52 @@ import streamlit as st
 import pymongo
 from google import genai
 from google.genai import types
-import numpy as np
+
+st.set_page_config(
+    page_title="Chatbot de Películas",
+    page_icon="🎬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+    }
+    .stTitle {
+        color: #f8fafc;
+    }
+    .stSidebar {
+        background-color: #0f172a;
+    }
+    .stButton>button {
+        background-color: #f97316;
+        color: white;
+        border: none;
+    }
+    .stTextInput>div>div>input {
+        background: #1f2937;
+        color: #f8fafc;
+        border-radius: 0.5rem;
+        border: 1px solid #334155;
+    }
+    .stMarkdown p,
+    .stMarkdown span,
+    .stMarkdown h1,
+    .stMarkdown h2,
+    .stMarkdown h3 {
+        color: #e2e8f0;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # =======================
 # CONFIGURACIÓN
 # =======================
-
 GOOGLE_API_KEY = st.secrets["app"]["GOOGLE_API_KEY"]
 MONGODB_URI = st.secrets["app"]["MONGODB_URI"]
 
@@ -18,7 +58,6 @@ if not GOOGLE_API_KEY or not MONGODB_URI:
 # =======================
 # CLIENTES (cacheados)
 # =======================
-
 @st.cache_resource
 def get_genai_client():
     return genai.Client(api_key=GOOGLE_API_KEY)
@@ -26,24 +65,16 @@ def get_genai_client():
 @st.cache_resource
 def get_mongo_collection():
     client = pymongo.MongoClient(MONGODB_URI)
-    db = client["pdf_embeddings_db"]
-    return db["pdf_vectors_peliculas"]
+    db = client["movies_db"]
+    return db["movies_vectors"]
 
 client_genai = get_genai_client()
 collection = get_mongo_collection()
 
 # =======================
-# FUNCIONES
+# UTILIDADES
 # =======================
-
 def crear_embedding(texto: str):
-    """
-    Genera embedding de la query con el mismo modelo y dimensión que se usó
-    al indexar (gemini-embedding-001, 768 dims, normalizado L2).
-
-    IMPORTANTE: para queries de búsqueda usar task_type='RETRIEVAL_QUERY'
-    (al indexar se usó 'RETRIEVAL_DOCUMENT').
-    """
     response = client_genai.models.embed_content(
         model="gemini-embedding-001",
         contents=texto,
@@ -53,11 +84,8 @@ def crear_embedding(texto: str):
     )
     return response.embeddings[0].values
 
+
 def buscar_similares(embedding, k=5):
-    """
-    Busca los documentos más similares en MongoDB Atlas Vector Search.
-    Requiere el índice 'vector_index' creado sobre el campo 'embedding'.
-    """
     pipeline = [
         {
             "$vectorSearch": {
@@ -78,17 +106,19 @@ def buscar_similares(embedding, k=5):
     ]
     return list(collection.aggregate(pipeline))
 
+
 def generar_respuesta(pregunta: str, contextos: list[dict]) -> str:
-    """Usa Gemini para responder con contexto recuperado (RAG)."""
-    contexto = "\n\n".join([c["texto"] for c in contextos])
-    prompt = f"""Eres un asistente experto. Usa EXCLUSIVAMENTE el siguiente contexto para responder la pregunta del usuario. Si la respuesta no está en el contexto, indícalo claramente.
+    contexto = "\n\n".join([f"- {c['texto']}" for c in contextos])
+    prompt = f"""Eres un asistente experto en películas.
+Usa exclusivamente el contexto provisto para responder la pregunta del usuario.
+Si la respuesta no está en el contexto, dilo claramente.
 
 Contexto:
 {contexto}
 
 Pregunta: {pregunta}
 
-Responde de forma concisa y clara en español."""
+Responde en español, de forma clara y breve."""
 
     response = client_genai.models.generate_content(
         model="gemini-2.5-flash",
@@ -100,34 +130,57 @@ Responde de forma concisa y clara en español."""
 # INTERFAZ STREAMLIT
 # =======================
 
-st.set_page_config(page_title="CineReview Assistant: Oppenheimer, Núremberg e Inception", page_icon="💬")
-st.title("💬 Chatbot de tu PDF (MongoDB + Gemini)")
+st.title("🎬 Chatbot de Películas")
+st.markdown("## Responde preguntas sobre directores, actores, géneros y sinopsis.")
+st.write("Escribe tu consulta y el asistente buscará en el corpus de películas cargado en MongoDB.")
+st.divider()
+
+with st.sidebar:
+    st.header("Bienvenido")
+    st.write("Este chat usa un corpus de películas en MongoDB para responder mejor.")
+    st.markdown("**Colección esperada:** `movies_db.movies_vectors`")
+    st.markdown("**Índice esperado:** `vector_index` sobre `embedding`")
+    st.markdown("---")
+    st.subheader("Ejemplos rápidos")
+    st.write("- ¿Quién dirigió *Pulp Fiction*?")
+    st.write("- ¿Qué películas protagoniza Scarlett Johansson?")
+    st.write("- Describe la trama de *Inception*.")
+    st.write("- Películas similares a *The Matrix*.")
+    st.markdown("---")
+    if st.button("Reiniciar conversación"):
+        st.session_state.historial = []
+        st.experimental_rerun()
 
 if "historial" not in st.session_state:
     st.session_state.historial = []
 
-# Mostrar historial PRIMERO (antes de procesar la nueva pregunta)
+col1, col2, col3 = st.columns([2, 1, 1])
+col1.metric("Corpus", "Películas")
+col2.metric("Modelo", "Gemini 2.5")
+col3.metric("Mensajes", len(st.session_state.historial))
+
+if not st.session_state.historial:
+    st.info("Escribe una pregunta en la caja de chat para iniciar.")
+
 for msg in st.session_state.historial:
     if msg["rol"] == "usuario":
         st.chat_message("user").write(msg["texto"])
     else:
         st.chat_message("assistant").write(msg["texto"])
 
-pregunta = st.chat_input("Escribe tu pregunta sobre el PDF...")
+pregunta = st.chat_input("¿Qué quieres saber sobre películas?")
 
 if pregunta:
-    # Mostrar inmediatamente la pregunta del usuario
-    st.chat_message("user").write(pregunta)
     st.session_state.historial.append({"rol": "usuario", "texto": pregunta})
+    st.chat_message("user").write(pregunta)
 
     with st.chat_message("assistant"):
-        with st.spinner("Buscando respuesta..."):
+        with st.spinner("Buscando en el corpus de películas..."):
             try:
                 emb = crear_embedding(pregunta)
                 similares = buscar_similares(emb, k=5)
-
                 if not similares:
-                    respuesta = "No encontré información relevante en el documento."
+                    respuesta = "No encontré información relevante sobre películas en el corpus."
                 else:
                     respuesta = generar_respuesta(pregunta, similares)
             except Exception as e:
@@ -135,9 +188,8 @@ if pregunta:
 
         st.write(respuesta)
 
-        # Opcional: mostrar fuentes recuperadas
         if 'similares' in locals() and similares:
-            with st.expander("🔍 Fragmentos recuperados"):
+            with st.expander("🔍 Fragmentos usados para generar la respuesta"):
                 for i, c in enumerate(similares, 1):
                     st.markdown(f"**Fragmento {i}** — score: `{c['score']:.4f}`")
                     st.write(c["texto"][:500] + ("…" if len(c["texto"]) > 500 else ""))
