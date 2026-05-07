@@ -27,7 +27,7 @@ def get_genai_client():
 def get_mongo_collection():
     client = pymongo.MongoClient(MONGODB_URI)
     db = client["pdf_embeddings_db"]
-    return db["pdf_vectors"]
+    return db["pdf_vectors_peliculas"]
 
 client_genai = get_genai_client()
 collection = get_mongo_collection()
