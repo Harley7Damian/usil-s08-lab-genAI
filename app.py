@@ -1,3 +1,4 @@
+%%writefile app.py
 import streamlit as st
 import pymongo
 from google import genai
@@ -65,8 +66,8 @@ def get_genai_client():
 @st.cache_resource
 def get_mongo_collection():
     client = pymongo.MongoClient(MONGODB_URI)
-    db = client["movies_db"]
-    return db["movies_vectors"]
+    db = client["pdf_embeddings_db"]
+    return db["pdf_vectors_peliculas"]
 
 client_genai = get_genai_client()
 collection = get_mongo_collection()
@@ -137,15 +138,26 @@ st.divider()
 
 with st.sidebar:
     st.header("Bienvenido")
-    st.write("Este chat usa un corpus de películas en MongoDB para responder mejor.")
-    st.markdown("**Colección esperada:** `movies_db.movies_vectors`")
-    st.markdown("**Índice esperado:** `vector_index` sobre `embedding`")
+    st.write("Este chat utiliza un documento PDF con información cinematográfica para responder preguntas sobre las siguientes películas:")
+    st.markdown("* Oppenheimer")
+    st.markdown("* Núremberg: El juicio del siglo")
+    st.markdown("* Inception")
+    st.markdown("---")
+    st.write("El asistente puede proporcionar información sobre:")
+    st.markdown("* Directores")
+    st.markdown("* Reparto y protagonistas")
+    st.markdown("* Reseñas")
+    st.markdown("* Resúmenes detallados")
+    st.markdown("* Contexto histórico y cinematográfico")
+    st.markdown("* Análisis general de las películas")
     st.markdown("---")
     st.subheader("Ejemplos rápidos")
-    st.write("- ¿Quién dirigió *Pulp Fiction*?")
-    st.write("- ¿Qué películas protagoniza Scarlett Johansson?")
-    st.write("- Describe la trama de *Inception*.")
-    st.write("- Películas similares a *The Matrix*.")
+    st.write("* ¿Quién dirigió Oppenheimer?")
+    st.write("* ¿Quién protagoniza Inception?")
+    st.write("* Describe la trama de Núremberg: El juicio del siglo.")
+    st.write("* ¿Cuál es el conflicto principal en Oppenheimer?")
+    st.write("* ¿Qué temas aborda Inception?")
+    st.write("* ¿Quién interpreta a Hermann Göring en Núremberg: El juicio del siglo?")
     st.markdown("---")
     if st.button("Reiniciar conversación"):
         st.session_state.historial = []
