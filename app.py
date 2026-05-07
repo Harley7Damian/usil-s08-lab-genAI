@@ -158,11 +158,12 @@ with st.sidebar:
     st.write("* ¿Qué temas aborda Inception?")
     st.write("* ¿Quién interpreta a Hermann Göring en Núremberg: El juicio del siglo?")
     st.markdown("---")
-    if st.button("Reiniciar conversación"):
-        st.session_state.historial = []
-        st.experimental_rerun()
+    reset_chat = st.button("Reiniciar conversación")
 
 if "historial" not in st.session_state:
+    st.session_state.historial = []
+
+if reset_chat:
     st.session_state.historial = []
 
 col1, col2, col3 = st.columns([2, 1, 1])
